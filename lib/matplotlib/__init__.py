@@ -645,7 +645,7 @@ def _get_config_or_cache_dir(xdg_base):
     h = get_home()
     if h is not None:
         p = os.path.join(h, '.matplotlib')
-    if sys.platform.startswith('linux'):
+    if sys.platform.startswith('linux') or sys.platform.startswith('freebsd'):
         p = None
         if xdg_base is not None:
             p = os.path.join(xdg_base, 'matplotlib')
@@ -1488,9 +1488,6 @@ def _init_tests():
     else:
         faulthandler.enable()
 
-    if not os.path.isdir(os.path.join(os.path.dirname(__file__), 'tests')):
-        raise ImportError("matplotlib test data is not installed")
-
     # The version of FreeType to install locally for running the
     # tests.  This must match the value in `setupext.py`
     LOCAL_FREETYPE_VERSION = '2.6.1'
@@ -1526,6 +1523,8 @@ def test(verbosity=None, coverage=False, switch_backend_warn=True,
          recursionlimit=0, **kwargs):
     """run the matplotlib test suite"""
     _init_tests()
+    if not os.path.isdir(os.path.join(os.path.dirname(__file__), 'tests')):
+        raise ImportError("matplotlib test data is not installed")
 
     old_backend = get_backend()
     old_recursionlimit = sys.getrecursionlimit()
@@ -1536,8 +1535,21 @@ def test(verbosity=None, coverage=False, switch_backend_warn=True,
         import pytest
 
         args = kwargs.pop('argv', [])
-        if not any(os.path.exists(arg) for arg in args):
-            args += ['--pyargs'] + default_test_modules
+        provide_default_modules = True
+        use_pyargs = True
+        for arg in args:
+            if any(arg.startswith(module_path)
+                   for module_path in default_test_modules):
+                provide_default_modules = False
+                break
+            if os.path.exists(arg):
+                provide_default_modules = False
+                use_pyargs = False
+                break
+        if use_pyargs:
+            args += ['--pyargs']
+        if provide_default_modules:
+            args += default_test_modules
 
         if coverage:
             args += ['--cov']
